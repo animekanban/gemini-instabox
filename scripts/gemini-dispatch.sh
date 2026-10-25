@@ -4,7 +4,7 @@
 #   gemini-dispatch.sh [script flags] "prompt"          one prompt, auto-picked machine
 #   gemini-dispatch.sh -B prompts.txt [-P N] [flags]    batch: one prompt per line, N in parallel (default 2)
 #   gemini-dispatch.sh -S                               status of every machine
-# Script flags (-M -e -a -C -t -j) are passed to gemini-remote.sh. -m forces one machine (no failover).
+# Script flags (-M -e -a -C -t -j -A) are passed to gemini-remote.sh. -m forces one machine (no failover).
 # Needs GEMINI_IBX_MACHINES, INSTABOX_API_KEY.
 set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -61,10 +61,10 @@ run_one() {  # args: passthrough flags..., prompt via stdin
 }
 
 BATCH=""; PAR=2; PASS=(); FORCE=""
-while getopts "B:P:Sm:M:e:a:C:t:jLh" o; do
+while getopts "B:P:Sm:M:e:a:C:t:jALh" o; do
   case $o in
     S) status; exit 0;; B) BATCH=$OPTARG;; P) PAR=$OPTARG;; m) FORCE=$OPTARG;;
-    M|e|a|C|t) PASS+=("-$o" "$OPTARG");; j) PASS+=(-j);; L) exec bash "$DIR/gemini-remote.sh" -m "${NAMES[0]}" -L;;
+    M|e|a|C|t) PASS+=("-$o" "$OPTARG");; j) PASS+=(-j);; A) PASS+=(-A);; L) exec bash "$DIR/gemini-remote.sh" -m "${NAMES[0]}" -L;;
     h) sed -n 2,9p "$0"; exit 0;; *) exit 2;;
   esac
 done

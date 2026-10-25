@@ -15,15 +15,17 @@ usage: gemini-remote.sh [-m MACHINE] [-M MODEL] [-a MODE] [-C DIR] [-t SECONDS] 
   -C  working directory on the machine                   (default: /data/home)
   -t  timeout seconds, max 600                           (default: 300)
   -j  print Gemini's raw JSON instead of just the answer
+  -A  async/poll mode: start agy in the background on the machine and poll with short
+      (~1 s) requests until done. Use when your environment drops or hangs on long HTTP calls.
   PROMPT  prompt text; if omitted, read from stdin. Piped stdin + PROMPT are combined.
 U
 }
 
-MACHINE="${GEMINI_IBX_MACHINE:-agent01}"; MODEL="${GEMINI_IBX_MODEL:-}"; LIST=0; MODE="safe"; EFFORT=""; CWD="/data/home"; TO=300; RAW=0
-while getopts "m:M:e:a:C:t:jLh" o; do
+MACHINE="${GEMINI_IBX_MACHINE:-agent01}"; MODEL="${GEMINI_IBX_MODEL:-}"; LIST=0; MODE="safe"; EFFORT=""; CWD="/data/home"; TO=300; RAW=0; ASYNC=0
+while getopts "m:M:e:a:C:t:jALh" o; do
   case $o in
     m) MACHINE=$OPTARG;; M) MODEL=$OPTARG;; e) EFFORT=$OPTARG;; a) MODE=$OPTARG;; C) CWD=$OPTARG;;
-    t) TO=$OPTARG;; j) RAW=1;; L) LIST=1;; h) usage; exit 0;; *) usage; exit 2;;
+    t) TO=$OPTARG;; j) RAW=1;; A) ASYNC=1;; L) LIST=1;; h) usage; exit 0;; *) usage; exit 2;;
   esac
 done
 shift $((OPTIND-1))
@@ -62,10 +64,32 @@ CMD='"$HOME/.local/bin/agy" -p "$(cat)" --output-format json'" --print-timeout $
 [ -n "$EFFORT" ] && CMD="$CMD --effort $(printf %q "$EFFORT")"
 [ "$MODE" = yolo ] && CMD="$CMD --dangerously-skip-permissions"
 
-BODY=$(jq -n --arg cmd "$CMD" --arg stdin "$PROMPT" --arg cwd "$CWD" --argjson t "$TO" \
-  '{cmd:$cmd, stdin:$stdin, cwd:$cwd, timeoutSeconds:$t}')
-RES=$(curl -sS -m $((TO+30)) -X POST "$API/v1/machines/$ID/exec" \
-  -H "X-API-Key: $INSTABOX_API_KEY" -H 'Content-Type: application/json' -d "$BODY")
+ibx_exec() { # cmd stdin timeout -> raw JSON result
+  local b; b=$(jq -n --arg cmd "$1" --arg stdin "$2" --arg cwd "$CWD" --argjson t "$3" \
+    '{cmd:$cmd, stdin:$stdin, cwd:$cwd, timeoutSeconds:$t}')
+  curl -sS -m $(($3+30)) -X POST "$API/v1/machines/$ID/exec" \
+    -H "X-API-Key: $INSTABOX_API_KEY" -H 'Content-Type: application/json' -d "$b"
+}
+
+if [ "$ASYNC" = 1 ]; then
+  JOB="j$(date +%s)$RANDOM"; D='$HOME/.gemini-jobs'
+  # job script: prompt via file, result JSON + exit code written when done
+  START="mkdir -p $D; cat > $D/$JOB.in; cd $(printf %q "$CWD"); nohup setsid bash -c $(printf %q "{ $CMD; } < $D/$JOB.in > $D/$JOB.out 2> $D/$JOB.err; echo \$? > $D/$JOB.code") >/dev/null 2>&1 < /dev/null & echo started"
+  R=$(ibx_exec "$START" "$PROMPT" 30)
+  echo "$R" | jq -e '.exitCode==0' >/dev/null 2>&1 || { echo "InstaBox error (machine may be suspended or cooling down): $R" >&2; exit 3; }
+  END=$(( $(date +%s) + TO + 10 ))
+  while :; do
+    sleep 3
+    R=$(ibx_exec "cat $D/$JOB.code 2>/dev/null" "" 20 || true)
+    C=$(echo "$R" | jq -r '.stdout // ""' 2>/dev/null | tr -d '[:space:]')
+    [ -n "$C" ] && break
+    [ "$(date +%s)" -gt "$END" ] && { echo "async job $JOB timed out after ${TO}s" >&2; exit 124; }
+  done
+  RES=$(ibx_exec "jq -n --rawfile o $D/$JOB.out --rawfile e $D/$JOB.err --argjson c \$(cat $D/$JOB.code) '{stdout:\$o,stderr:\$e,exitCode:\$c}'; rm -f $D/$JOB.*" "" 30)
+  RES=$(echo "$RES" | jq -r '.stdout')
+else
+  RES=$(ibx_exec "$CMD" "$PROMPT" "$TO")
+fi
 
 if ! echo "$RES" | jq -e 'has("exitCode")' >/dev/null 2>&1; then
   echo "InstaBox error (machine may be suspended or cooling down): $RES" >&2; exit 3
