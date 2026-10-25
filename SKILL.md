@@ -25,7 +25,7 @@ cat report.md | scripts/gemini-remote.sh "Summarize the file above in 5 bullets"
 scripts/gemini-remote.sh -m agent02 -M claude-opus-4-6-thinking "..."
 scripts/gemini-remote.sh -a yolo -C ~/proj "Fix the failing test"   # lets the agent run commands and edit files on the machine
 ```
-Flags: `-m` machine alias or id, `-M` model alias or slug (optional, see above), `-L` list models, `-e` effort, `-a` `safe` (default: shell commands soft-denied) or `yolo` (auto-approve everything), `-C` cwd on the machine, `-t` timeout (≤600 s), `-j` raw JSON.
+Flags: `-m` machine alias or id, `-M` model alias or slug (optional, see above), `-L` list models, `-e` effort, `-a` `safe` (default: shell commands soft-denied) or `yolo` (auto-approve everything), `-C` cwd on the machine, `-t` timeout (≤600 s), `-j` raw JSON, `-A` async/poll mode (starts agy in the background on the machine and polls with ~1 s requests; use it when your environment hangs or drops long HTTP calls).
 Output: the answer on stdout; errors on stderr with a non-zero exit.
 
 ## Choosing a model (optional)
@@ -58,7 +58,7 @@ scripts/gemini-dispatch.sh -B prompts.txt -P 3          # batch, one prompt per 
 scripts/gemini-dispatch.sh -S                           # machine status
 scripts/gemini-dispatch.sh -m agent02 "prompt"          # force one machine
 ```
-Other flags (`-M -e -a -C -t -j`) pass through to `gemini-remote.sh`. The machine used is printed to stderr as `[machine: …]`. State lives in `$GEMINI_IBX_STATE` (default `/tmp/gemini-ibx`).
+Other flags (`-M -e -a -C -t -j -A`) pass through to `gemini-remote.sh`. The machine used is printed to stderr as `[machine: …]`. State lives in `$GEMINI_IBX_STATE` (default `/tmp/gemini-ibx`).
 
 ## Rules for the agent
 - Never print or echo `INSTABOX_API_KEY` or the OAuth token, and never put secrets or private data in prompts unless the user asked.
