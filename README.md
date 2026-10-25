@@ -72,7 +72,7 @@ Model aliases: `flash`, `flash-medium`, `flash-low`, `sonnet`, `opus`, `gpt-oss`
 - All machines share one Google account's quota; avoid large parallel fan-outs.
 - Each call is a fresh session; put all context in the prompt.
 - Prompts and answers are encrypted in transit but visible to InstaBox and Google. Don't send secrets.
-- If your shell tool's stdin is not a TTY and never sends EOF, redirect stdin (`< /dev/null`) when passing the prompt as an argument, or the call blocks before it starts.
+- If your shell tool's stdin is a pipe that never closes, the scripts wait at most 1 s for stdin when the prompt is an argument. Redirecting `< /dev/null` is still safest.
 - See `SKILL.md` for agent-facing rules.
 
 ## License

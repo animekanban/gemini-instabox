@@ -63,7 +63,7 @@ Other flags (`-M -e -a -C -t -j -A`) pass through to `gemini-remote.sh`. The mac
 ## Rules for the agent
 - Never print or echo `INSTABOX_API_KEY` or the OAuth token, and never put secrets or private data in prompts unless the user asked.
 - One call = one fresh session; put all context in the prompt or pipe it via stdin (≤1 MiB).
-- If your shell tool's stdin is not a TTY and never sends EOF, the scripts block forever reading the prompt before any API call is made (the job never reaches the machine). Always redirect stdin (`< /dev/null`) or pipe the prompt in, and prefer `-A` async/poll mode in such environments.
+- If your shell tool's stdin is a pipe that never sends EOF: when the prompt is passed as an argument the scripts wait at most 1 s for stdin, then go on; when the prompt comes only from stdin they wait for EOF. Redirecting `< /dev/null` is still the safest, and prefer `-A` async/poll mode in such environments.
 - Keep `-a safe` unless the user asked for changes on the machine. Note: even in safe mode the agent may write files inside the cwd; use an empty cwd for pure Q&A. Edited files live on the machine, not locally.
 - Jobs over 10 minutes fail (exec limit); split them.
 - Exit 3 = machine suspended or cooling down: try another machine. Don't resume or reset machines to get around plan limits.
