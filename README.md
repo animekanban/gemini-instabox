@@ -63,6 +63,7 @@ bash $D -L                                           # models your account can u
 | `-t` | timeout in seconds (max 600) |
 | `-m` | force a specific machine |
 | `-j` | raw JSON output |
+| `-A` | async/poll mode: runs agy in the background on the machine and polls with short requests; use it when your environment hangs or drops long HTTP calls |
 
 Model aliases: `flash`, `flash-medium`, `flash-low`, `sonnet`, `opus`, `gpt-oss`. Availability depends on your Google plan; run `-L` to check.
 
@@ -71,6 +72,7 @@ Model aliases: `flash`, `flash-medium`, `flash-low`, `sonnet`, `opus`, `gpt-oss`
 - All machines share one Google account's quota; avoid large parallel fan-outs.
 - Each call is a fresh session; put all context in the prompt.
 - Prompts and answers are encrypted in transit but visible to InstaBox and Google. Don't send secrets.
+- If your shell tool's stdin is not a TTY and never sends EOF, redirect stdin (`< /dev/null`) when passing the prompt as an argument, or the call blocks before it starts.
 - See `SKILL.md` for agent-facing rules.
 
 ## License
