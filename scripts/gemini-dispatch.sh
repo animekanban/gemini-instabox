@@ -85,7 +85,14 @@ if [ -n "$BATCH" ]; then
   exit 0
 fi
 
-PROMPT_IN=""; [ -t 0 ] || PROMPT_IN="$(cat)"
+# Read piped stdin. With prompt args, wait at most 1 s for stdin to start, so an agent shell whose
+# stdin is a pipe that never closes doesn't block forever; without args, stdin is the prompt.
+read_stdin() {
+  [ -t 0 ] && return 0
+  if [ "$1" -gt 0 ]; then local c=""; IFS= read -r -d '' -t 1 -N 1 c || [ -n "$c" ] || return 0; printf '%s' "$c"; fi
+  cat
+}
+PROMPT_IN="$(read_stdin $#)"
 [ $# -gt 0 ] && PROMPT_IN="${PROMPT_IN:+$PROMPT_IN
 
 }$*"
