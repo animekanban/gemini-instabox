@@ -70,22 +70,30 @@ ibx_exec() { # cmd stdin timeout -> raw JSON result
   curl -sS -m $(($3+30)) -X POST "$API/v1/machines/$ID/exec" \
     -H "X-API-Key: $INSTABOX_API_KEY" -H 'Content-Type: application/json' -d "$b"
 }
+ibx_retry() { # same args; retries transient gateway errors (502/503, non-JSON) up to 4 times
+  local r i; for i in 1 2 3 4; do
+    r=$(ibx_exec "$@" || true)
+    echo "$r" | jq -e 'has("exitCode")' >/dev/null 2>&1 && { echo "$r"; return 0; }
+    sleep 3
+  done; echo "$r"; return 1
+}
 
 if [ "$ASYNC" = 1 ]; then
   JOB="j$(date +%s)$RANDOM"; D='$HOME/.gemini-jobs'
   # job script: prompt via file, result JSON + exit code written when done
   START="mkdir -p $D; cat > $D/$JOB.in; cd $(printf %q "$CWD"); nohup setsid bash -c $(printf %q "{ $CMD; } < $D/$JOB.in > $D/$JOB.out 2> $D/$JOB.err; echo \$? > $D/$JOB.code") >/dev/null 2>&1 < /dev/null & echo started"
-  R=$(ibx_exec "$START" "$PROMPT" 30)
+  R=$(ibx_retry "$START" "$PROMPT" 30 || true)
   echo "$R" | jq -e '.exitCode==0' >/dev/null 2>&1 || { echo "InstaBox error (machine may be suspended or cooling down): $R" >&2; exit 3; }
   END=$(( $(date +%s) + TO + 10 ))
   while :; do
     sleep 3
-    R=$(ibx_exec "cat $D/$JOB.code 2>/dev/null" "" 20 || true)
+    R=$(ibx_exec "cat $D/$JOB.code 2>/dev/null" "" 20 || true)  # a failed poll just waits for the next one
     C=$(echo "$R" | jq -r '.stdout // ""' 2>/dev/null | tr -d '[:space:]')
     [ -n "$C" ] && break
     [ "$(date +%s)" -gt "$END" ] && { echo "async job $JOB timed out after ${TO}s" >&2; exit 124; }
   done
-  RES=$(ibx_exec "jq -n --rawfile o $D/$JOB.out --rawfile e $D/$JOB.err --argjson c \$(cat $D/$JOB.code) '{stdout:\$o,stderr:\$e,exitCode:\$c}'; rm -f $D/$JOB.*" "" 30)
+  RES=$(ibx_retry "jq -n --rawfile o $D/$JOB.out --rawfile e $D/$JOB.err --argjson c \$(cat $D/$JOB.code) '{stdout:\$o,stderr:\$e,exitCode:\$c}'" "" 30) || { echo "async job $JOB finished but its result could not be fetched: $RES" >&2; exit 3; }
+  ibx_exec "rm -f $D/$JOB.*" "" 20 >/dev/null 2>&1 || true
   RES=$(echo "$RES" | jq -r '.stdout')
 else
   RES=$(ibx_exec "$CMD" "$PROMPT" "$TO")
